@@ -11,35 +11,35 @@ import Foundation
 
 /// Partial formatter
 public final class PartialFormatter {
-    private let phoneNumberKit: PhoneNumberKit
+    private let utility: PhoneNumberUtility
 
     weak var metadataManager: MetadataManager?
     weak var parser: PhoneNumberParser?
     weak var regexManager: RegexManager?
 
-    public convenience init(phoneNumberKit: PhoneNumberKit = PhoneNumberKit(),
-                            defaultRegion: String = PhoneNumberKit.defaultRegionCode(),
+    public convenience init(utility: PhoneNumberUtility = PhoneNumberUtility(),
+                            defaultRegion: String = PhoneNumberUtility.defaultRegionCode(),
                             withPrefix: Bool = true,
                             maxDigits: Int? = nil,
                             ignoreIntlNumbers: Bool = false) {
-        self.init(phoneNumberKit: phoneNumberKit,
-                  regexManager: phoneNumberKit.regexManager,
-                  metadataManager: phoneNumberKit.metadataManager,
-                  parser: phoneNumberKit.parseManager.parser,
+        self.init(utility: utility,
+                  regexManager: utility.regexManager,
+                  metadataManager: utility.metadataManager,
+                  parser: utility.parseManager.parser,
                   defaultRegion: defaultRegion,
                   withPrefix: withPrefix,
                   maxDigits: maxDigits,
                   ignoreIntlNumbers: ignoreIntlNumbers)
     }
 
-    init(phoneNumberKit: PhoneNumberKit,
+    init(utility: PhoneNumberUtility,
          regexManager: RegexManager,
          metadataManager: MetadataManager,
          parser: PhoneNumberParser, defaultRegion: String,
          withPrefix: Bool = true,
          maxDigits: Int? = nil,
          ignoreIntlNumbers: Bool = false) {
-        self.phoneNumberKit = phoneNumberKit
+        self.utility = utility
         self.regexManager = regexManager
         self.metadataManager = metadataManager
         self.parser = parser
@@ -61,7 +61,7 @@ public final class PartialFormatter {
     func updateMetadataForDefaultRegion() {
         guard let metadataManager else { return }
         if let regionMetadata = metadataManager.filterTerritories(byCountry: defaultRegion) {
-            self.defaultMetadata = metadataManager.mainTerritory(forCode: regionMetadata.countryCode)
+            self.defaultMetadata = regionMetadata
         } else {
             self.defaultMetadata = nil
         }
@@ -80,15 +80,12 @@ public final class PartialFormatter {
     public var currentRegion: String {
         if ignoreIntlNumbers, currentMetadata?.codeID == "001" {
             return defaultRegion
+        } else if self.utility.countryCode(for: self.defaultRegion) != 1 {
+            return currentMetadata?.codeID ?? "US"
         } else {
-            let countryCode = self.phoneNumberKit.countryCode(for: self.defaultRegion)
-            if countryCode != 1, countryCode != 7 {
-                return currentMetadata?.codeID ?? "US"
-            } else {
-                return self.currentMetadata?.countryCode == 1 || self.currentMetadata?.countryCode == 7
-                    ? self.defaultRegion
-                    : self.currentMetadata?.codeID ?? self.defaultRegion
-            }
+            return self.currentMetadata?.countryCode == 1 ?
+                self.defaultRegion :
+                self.currentMetadata?.codeID ?? self.defaultRegion
         }
     }
 
@@ -305,7 +302,10 @@ public final class PartialFormatter {
         var tempPossibleFormats = [MetadataPhoneNumberFormat]()
         var possibleFormats = [MetadataPhoneNumberFormat]()
         if let metadata = currentMetadata {
-            let formatList = metadata.numberFormats
+            var formatList = metadata.numberFormats
+            if formatList.isEmpty {
+                formatList = metadataManager?.mainTerritory(forCode: metadata.countryCode)?.numberFormats ?? []
+            }
             for format in formatList {
                 if self.isFormatEligible(format) {
                     tempPossibleFormats.append(format)
